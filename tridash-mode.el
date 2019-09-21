@@ -173,6 +173,10 @@
       (forward-char)
       ";")
 
+     ((looking-at ",")
+      (forward-char)
+      ",")
+
      (t
       (if (/= (skip-syntax-forward "w_") 0)
   	  (if (= (mod (tridash-count-nodes-till-point) 2) 0)
@@ -192,6 +196,10 @@
    ((looking-back ";" 1)
     (backward-char)
     ";")
+
+   ((looking-back "," 1)
+    (backward-char)
+    ",")
 
    (t
     (if (/= (skip-syntax-backward "w_") 0)
