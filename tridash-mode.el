@@ -129,7 +129,12 @@
     (`(:elem . basic) tridash-indent-basic)
     (`(,_ . ",") (smie-rule-separator kind))
     (`(,:after . ";")
-     0)))
+     0)
+
+    (`(:after . "operator")
+     (if (and (smie-rule-hanging-p)
+    	      (not (smie-rule-parent-p "operator")))
+    	 tridash-indent-basic))))
 
 (defun tridash-forward-comment ()
   "Moves point forward to the next character which is not
