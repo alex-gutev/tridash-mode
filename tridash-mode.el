@@ -16,9 +16,11 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
 ;;; Code:
 
 (require 'smie)
+(require 'regexp-opt)
 
 (defvar tridash-mode-map
   (let ((map (make-sparse-keymap)))
@@ -101,21 +103,8 @@
     '((assoc ","))
     '((assoc "operator")))))
 
-;;;###autoload
-(define-derived-mode tridash-mode prog-mode "Tridash"
-  "Major mode for editing Tridash source files"
-  :syntax-table tridash-mode-syntax-table
 
-  (setq-local multibyte-syntax-as-symbol t)
-  (setq-local comment-start "# ")
-  (setq-local comment-start-skip "#+\\s-*")
-  (setq-local font-lock-defaults '(tridash-font-lock-keywords))
-
-  (smie-setup tridash-smie-grammar 'tridash-smie-rules
-	      :forward-token #'tridash-smie-forward-token
-	      :backward-token #'tridash-smie-backward-token))
-
-
+
 ;;; Indentation
 
 ;; If NIL SMIE will use the value of `smie-indent-basic'
@@ -230,7 +219,13 @@
 	 ((not (zerop (skip-syntax-backward "w_")))
 	  (setq nodes (1+ nodes)))
 
+	 ;; Parenthesis and braces may only form part of operand nodes
 	 ((not (zerop (skip-syntax-backward ")")))
+	  (setq nodes (1+ nodes))
+	  (setq end? t))
+
+	 ;; Strings may only form part of operand nodes
+	 ((not (zerop (skip-syntax-backward "\"")))
 	  (setq nodes (1+ nodes))
 	  (setq end? t))
 
@@ -239,6 +234,23 @@
 
       nodes)))
 
+
+
+;;; Mode Definition
+
+;;;###autoload
+(define-derived-mode tridash-mode prog-mode "Tridash"
+  "Major mode for editing Tridash source files"
+  :syntax-table tridash-mode-syntax-table
+
+  (setq-local multibyte-syntax-as-symbol t)
+  (setq-local comment-start "# ")
+  (setq-local comment-start-skip "#+\\s-*")
+  (setq-local font-lock-defaults '(tridash-font-lock-keywords))
+
+  (smie-setup tridash-smie-grammar 'tridash-smie-rules
+	      :forward-token #'tridash-smie-forward-token
+	      :backward-token #'tridash-smie-backward-token))
 
 ;;; Module
 
