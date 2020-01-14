@@ -81,10 +81,11 @@
   (list
    (cons
     (regexp-opt
-     '(":module" ":use" ":alias" ":import" ":in" ":export"
-       ":op" ":extern"
-       ":attribute" ":quote"
-       "self")
+     '("/operator" "/quote"
+       "/context" "/state"
+       "/external" "self"
+       "/attribute" "/attribute-processor"
+       "/module" "/import" "/use-as" "/use" "/export" "/in")
      t)
     'font-lock-builtin-face)))
 
