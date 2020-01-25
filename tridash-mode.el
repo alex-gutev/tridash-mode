@@ -1,7 +1,7 @@
 ;; -*- lexical-binding: t -*-
 ;;; tridash.el --- Tridash language major mode
 
-;; Copyright (C) 2019  Alexander Gutev
+;; Copyright (C) 2019-2020  Alexander Gutev
 ;;
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 
 ;;; Code:
 
-(require 'smie)
 (require 'regexp-opt)
 
 (defvar tridash-mode-map
@@ -89,42 +88,94 @@
      t)
     'font-lock-builtin-face)))
 
-(defvar tridash-smie-grammar
-  (smie-prec2->grammar
-   (smie-bnf->prec2
-    '((atom)
-      (node (node "operator" node)
-	    ("(" node-list ")")
-	    ("{" nodes "}")
-	    (atom))
-      (nodes (node ";")
-	     (node "\n"))
-      (node-list (node-list "," node-list)
-		 (node)))
-    '((assoc ","))
-    '((assoc "operator")))))
-
-
 
 ;;; Indentation
 
-;; If NIL SMIE will use the value of `smie-indent-basic'
 (defvar tridash-indent-basic 4)
 
 
-(defun tridash-smie-rules (kind token)
-  "SMIE Tridash indentation rules function."
+(defun tridash-indent-line ()
+  "Indent current line of Tridash code."
+  (interactive)
 
-  (pcase (cons kind token)
-    (`(:elem . basic) tridash-indent-basic)
-    (`(,_ . ",") (smie-rule-separator kind))
-    (`(,:after . ";")
-     0)
+  (let ((savep (> (current-column) (current-indentation)))
+	(indent (condition-case nil (max (tridash-calculate-indentation) 0)
+		  (error 0))))
 
-    (`(:after . "operator")
-     (if (and (smie-rule-hanging-p)
-    	      (not (smie-rule-parent-p "operator")))
-    	 tridash-indent-basic))))
+    (if savep
+	(save-excursion (indent-line-to indent))
+      (indent-line-to indent))))
+
+(defun tridash-calculate-indentation ()
+  "Calculate the indentation level for the line at point."
+
+  (save-excursion
+    (beginning-of-line)
+
+    (if (looking-at "[[:blank:]]*[})]")
+	(progn
+	  (- (tridash-calculate-indentation-after-point) tridash-indent-basic))
+
+      (tridash-calculate-indentation-after-point))))
+
+(defun tridash-calculate-indentation-after-point ()
+  "Calculate the indentation of the line following point."
+
+  ;; Move to previous token, skipping whitespace and comments
+  (tridash-backward-comment)
+
+  (if (looking-back "[({]" 1)
+      ;; If closing parenthesis at end of line, indent by one level
+      ;; otherwise return current column.
+
+      (if (looking-at "[[:blank:]]*$")
+	  (+ (current-indentation) tridash-indent-basic)
+	(current-column))
+
+    ;; If at closing parenthesis, return to beginning of infix
+    ;; expression and indent according to its indentation level.
+
+    (if (looking-back "[})]" 1)
+	(progn
+	  (tridash-expression-beginning)
+	  (current-indentation))
+
+      ;; If after infix operator, indent by 1 level. Otherwise, return
+      ;; to beginning of infix expression and calculate indentation
+      ;; from that point.
+
+      (let ((num-nodes (tridash-count-nodes-till-point)))
+	(if (and (> num-nodes 0)
+		 (= (mod num-nodes 2) 0))
+
+	    (+ (current-indentation) tridash-indent-basic)
+
+	  (tridash-expression-beginning)
+	  (tridash-calculate-indentation-after-point))))))
+
+(defun tridash-expression-beginning ()
+  "Moves backwards to the beginning of the infix expression at point."
+
+  (condition-case nil
+      (while
+	  (and (not (bobp))
+	       (or (not (bolp))
+		   (save-excursion
+		     (tridash-backward-comment)
+		     (tridash-after-operator-p))))
+
+	(backward-sexp))
+    (error nil)))
+
+(defun tridash-after-operator-p ()
+  "Check whether point is after an operator."
+
+  (let ((num-nodes (tridash-count-nodes-till-point)))
+    (and (> num-nodes 0)
+    	 (= (mod num-nodes 2) 0))))
+
+
+;;;; Comments
 
 (defun tridash-forward-comment ()
   "Moves point forward to the next character which is not
@@ -153,56 +204,8 @@
 	(goto-char start-point)
 	(re-search-backward "[\n|\r]" end-point t)))))
 
-(defun tridash-smie-forward-token ()
-  "SMIE Tridash forward token function. Returns \"node\" for node
-   tokens, returns \"operator\" for infix operators."
 
-  (let ((num-nodes (tridash-count-nodes-till-point)))
-
-    (cond
-     ((and (tridash-forward-comment)
-	   (/= (mod num-nodes 2) 0))
-      ";")
-
-     ((looking-at ";")
-      (forward-char)
-      ";")
-
-     ((looking-at ",")
-      (forward-char)
-      ",")
-
-     (t
-      (if (/= (skip-syntax-forward "w_") 0)
-  	  (if (= (mod (tridash-count-nodes-till-point) 2) 0)
-  	      "operator"
-  	    "node")
-	"")))))
-
-(defun tridash-smie-backward-token ()
-  "SMIE Tridash backward token function. Returns \"node\" for
-   node tokens, returns \"operator\" for infix operators."
-
-  (cond
-   ((and (tridash-backward-comment)
-	 (/= (mod (tridash-count-nodes-till-point) 2) 0))
-    ";")
-
-   ((looking-back ";" 1)
-    (backward-char)
-    ";")
-
-   ((looking-back "," 1)
-    (backward-char)
-    ",")
-
-   (t
-    (if (/= (skip-syntax-backward "w_") 0)
-  	(if (= (mod (tridash-count-nodes-till-point) 2) 0)
-  	    "node"
-  	  "operator")
-      ""))))
-
+;;;; Counting Nodes on Line
 
 (defun tridash-count-nodes-till-point ()
   "Returns the number of nodes (tokens separated by whitespace)
@@ -249,9 +252,7 @@
   (setq-local comment-start-skip "#+\\s-*")
   (setq-local font-lock-defaults '(tridash-font-lock-keywords))
 
-  (smie-setup tridash-smie-grammar 'tridash-smie-rules
-	      :forward-token #'tridash-smie-forward-token
-	      :backward-token #'tridash-smie-backward-token))
+  (setq-local indent-line-function 'tridash-indent-line))
 
 ;;; Module
 
