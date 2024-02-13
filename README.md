@@ -1,5 +1,8 @@
 # Tridash Mode
 
+> [!IMPORTANT]  
+> Tridash will no longer be developed. Future development will focus on the [Live Cells](https://docs.page/alex-gutev/live_cells) project, which incorporates some of the ideas presented here.
+
 This is an emacs major mode for editing Tridash source files,
 supporting rudimentary syntax highlighting and automatic indentation.
 
